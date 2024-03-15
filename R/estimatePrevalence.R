@@ -41,8 +41,6 @@
 #' strata specific results (when strata has been specified).
 #' @param minCellCount Minimum number of events to report- results
 #' lower than this will be obscured. If NULL all results will be reported.
-#' @param temporary If TRUE, temporary tables will be used throughout. If
-#' FALSE, permanent tables will be created in the write_schema of the cdm.
 #' @param returnParticipants Either TRUE or FALSE. If TRUE references to
 #' participants from the analysis will be returned allowing for further
 #' analysis. Note, if using permanent tables and returnParticipants is TRUE,
@@ -53,7 +51,7 @@
 #'
 #' @examples
 #' \donttest{
-#' cdm <- mockIncidencePrevalenceRef(sampleSize = 10000)
+#' cdm <- mockIncidencePrevalenceRef(sampleSize = 1000)
 #' cdm <- generateDenominatorCohortSet(
 #'   cdm = cdm, name = "denominator",
 #'   cohortDateRange = c(as.Date("2008-01-01"), as.Date("2018-01-01"))
@@ -75,7 +73,6 @@ estimatePointPrevalence <- function(cdm,
                                     strata = list(),
                                     includeOverallStrata = TRUE,
                                     minCellCount = 5,
-                                    temporary = TRUE,
                                     returnParticipants = FALSE) {
   errorMessage <- checkmate::makeAssertCollection()
   checkmate::assertTRUE(
@@ -102,7 +99,6 @@ estimatePointPrevalence <- function(cdm,
     strata = strata,
     includeOverallStrata = includeOverallStrata,
     minCellCount = minCellCount,
-    temporary = temporary,
     returnParticipants = returnParticipants
   )
 }
@@ -141,8 +137,6 @@ estimatePointPrevalence <- function(cdm,
 #' strata specific results (when strata has been specified).
 #' @param minCellCount Minimum number of events to report- results
 #' lower than this will be obscured. If NULL all results will be reported.
-#' @param temporary If TRUE, temporary tables will be used throughout. If
-#' FALSE, permanent tables will be created in the write_schema of the cdm.
 #' @param returnParticipants Either TRUE or FALSE. If TRUE references to
 #' participants from the analysis will be returned allowing for further
 #' analysis. Note, if using permanent tables and returnParticipants is TRUE,
@@ -153,7 +147,7 @@ estimatePointPrevalence <- function(cdm,
 #'
 #' @examples
 #' \donttest{
-#' cdm <- mockIncidencePrevalenceRef(sampleSize = 10000)
+#' cdm <- mockIncidencePrevalenceRef(sampleSize = 1000)
 #' cdm <- generateDenominatorCohortSet(
 #'   cdm = cdm, name = "denominator",
 #'   cohortDateRange = c(as.Date("2008-01-01"), as.Date("2018-01-01"))
@@ -176,7 +170,6 @@ estimatePeriodPrevalence <- function(cdm,
                                      strata = list(),
                                      includeOverallStrata = TRUE,
                                      minCellCount = 5,
-                                     temporary = TRUE,
                                      returnParticipants = FALSE) {
   estimatePrevalence(
     cdm = cdm,
@@ -192,7 +185,6 @@ estimatePeriodPrevalence <- function(cdm,
     strata = strata,
     includeOverallStrata = includeOverallStrata,
     minCellCount = minCellCount,
-    temporary = temporary,
     returnParticipants = returnParticipants
   )
 }
@@ -210,7 +202,6 @@ estimatePrevalence <- function(cdm,
                                strata = list(),
                                includeOverallStrata = TRUE,
                                minCellCount = 5,
-                               temporary = TRUE,
                                returnParticipants = FALSE) {
   startCollect <- Sys.time()
 
@@ -231,7 +222,7 @@ estimatePrevalence <- function(cdm,
     type,
     interval, completeDatabaseIntervals,
     fullContribution, timePoint,
-    minCellCount, temporary,
+    minCellCount,
     returnParticipants
   )
 
@@ -252,7 +243,7 @@ estimatePrevalence <- function(cdm,
     outcomeCohortId <- CDMConnector::cohortCount(cdm[[outcomeTable]]) %>% dplyr::pull("cohort_definition_id")
   }
 
-  outcomeRef <- CDMConnector::cohortSet(cdm[[outcomeTable]]) %>%
+  outcomeRef <- CDMConnector::settings(cdm[[outcomeTable]]) %>%
     dplyr::filter(.env$outcomeCohortId %in% .data$cohort_definition_id) %>%
     dplyr::collect("cohort_definition_id", "cohort_name") %>%
     dplyr::rename("outcome_cohort_id" = "cohort_definition_id",
@@ -362,7 +353,7 @@ estimatePrevalence <- function(cdm,
 
   analysisSettings <- analysisSettings %>%
     dplyr::left_join(
-      CDMConnector::cohortSet(cdm[[denominatorTable]]) %>%
+      CDMConnector::settings(cdm[[denominatorTable]]) %>%
         dplyr::rename("cohort_id" = "cohort_definition_id") %>%
         dplyr::rename_with(
           .cols = tidyselect::everything(),
@@ -378,7 +369,7 @@ estimatePrevalence <- function(cdm,
   # the denominator cohort used
   for (i in seq_along(studySpecs)) {
     prsList[names(prsList) == "attrition"][[i]] <- dplyr::bind_rows(
-      CDMConnector::cohortAttrition(cdm[[denominatorTable]]) %>%
+      CDMConnector::attrition(cdm[[denominatorTable]]) %>%
         dplyr::rename("denominator_cohort_id" = "cohort_definition_id") %>%
         dplyr::filter(.data$denominator_cohort_id ==
           studySpecs[[i]]$denominatorCohortId) %>%
@@ -391,80 +382,28 @@ estimatePrevalence <- function(cdm,
 
   # participants
   if (returnParticipants == TRUE) {
-    participantTables <- unname(purrr::as_vector(prsList[stringr::str_detect(
-      names(prsList),
-      "study_population"
-    )]))
-
-    # combine to a single participants
-    # from 1st analysis
-
-    participants <- dplyr::tbl(
-      attr(cdm, "dbcon"),
-      CDMConnector::inSchema(
-        attr(cdm, "write_schema"),
-        participantTables[[1]]
-      )
-    )
-
-    if (length(participantTables) >= 2) {
-      # join additional analyses
-      participantTables <- participantTables[2:length(participantTables)]
-      for (i in seq_along(participantTables)) {
-        participants <- participants %>%
-          dplyr::full_join(
-            dplyr::tbl(
-              attr(cdm, "dbcon"),
-              CDMConnector::inSchema(
-                attr(cdm, "write_schema"),
-                participantTables[[i]]
-              )
-            ),
-            by = "subject_id"
-          ) %>%
-          CDMConnector::computeQuery(
-            name = paste0(
-              tablePrefix,
-              "_p_", i
-            ),
-            temporary = FALSE,
-            schema = attr(cdm, "write_schema"),
-            overwrite = TRUE
-          )
-      }
-    }
+    participantTables <- prsList[grepl("study_population_analyis_", names(prsList))]
 
     # make sure to not overwrite any existing participant table (from
     # previous function calls)
     p <- 1 + length(stringr::str_subset(
-      CDMConnector::listTables(attr(cdm, "dbcon"),
-        schema = attr(cdm, "write_schema")
+      CDMConnector::listTables(attr(attr(cdm, "cdm_source"), "dbcon"),
+                               schema = attr(attr(cdm, "cdm_source"), "write_Schema")
       ),
-      paste0(type, "_prev_participants")
+      paste0(type, "_prev_participants_")
     ))
 
-    participants <- participants %>%
-      CDMConnector::computeQuery(
-        name = paste0(type, "_prev_participants", p),
-        temporary = FALSE,
-        schema = attr(cdm, "write_schema"),
-        overwrite = TRUE
-      )
-    CDMConnector::dropTable(
-      cdm = cdm,
-      name = tidyselect::starts_with(paste0(
-        tablePrefix,
-        "_analysis_"
-      ))
-    )
-    CDMConnector::dropTable(
-      cdm = cdm,
-      name = tidyselect::starts_with(paste0(
-        tablePrefix,
-        "_p_"
-      ))
-    )
+    nm <- paste0(type, "_prev_participants_", p)
+    cdm[[nm]] <- purrr::reduce(
+      participantTables, dplyr::full_join, by = "subject_id"
+    ) %>%
+      dplyr::compute(name = nm, temporary = FALSE, overwrite = TRUE)
   }
+
+  CDMConnector::dropTable(
+    cdm = cdm,
+    name = tidyselect::starts_with(paste0(tablePrefix, "_analysis_"))
+  )
 
   # prevalence estimates
   prs <- prsList[names(prsList) == "pr"]
@@ -523,24 +462,21 @@ estimatePrevalence <- function(cdm,
     dplyr::left_join(analysisSettings, by = "analysis_id")
 
   # return results as an IncidencePrevalenceResult class
+  attr(prs, "settings") <- analysisSettings
   attr(prs, "attrition") <- attrition
   if (returnParticipants == TRUE) {
-    attr(prs, "participants") <- participants
+    attr(prs, "participants") <- cdm[[nm]]
   }
 
   class(prs) <- c("IncidencePrevalenceResult", "PrevalenceResult", class(prs))
-
 
   dur <- abs(as.numeric(Sys.time() - startCollect, units = "secs"))
   message(glue::glue(
     "Time taken: {floor(dur/60)} mins and {dur %% 60 %/% 1} secs"
   ))
 
-
   return(prs)
 }
-
-
 
 binomialCiWilson <- function(x, n) {
   alpha <- 0.05
