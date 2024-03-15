@@ -137,7 +137,7 @@ estimateIncidence <- function(cdm,
   if(nrow(outcomeRef) == 0){
     cli::cli_abort(c("Specified outcome IDs not found in the cohort set of
                     {paste0('cdm$', outcomeTable)}",
-                   "i" = "Run CDMConnector::cohort_set({paste0('cdm$', outcomeTable)})
+                     "i" = "Run CDMConnector::cohort_set({paste0('cdm$', outcomeTable)})
                    to check which IDs exist"))
   }
 
@@ -159,9 +159,9 @@ estimateIncidence <- function(cdm,
     dplyr::inner_join(
       cdm[[denominatorTable]] %>%
         dplyr::filter(.data$cohort_definition_id %in%
-          .env$denominatorCohortId) %>%
+                        .env$denominatorCohortId) %>%
         dplyr::select(c("subject_id", "cohort_start_date",
-                      "cohort_end_date")) %>%
+                        "cohort_end_date")) %>%
         dplyr::distinct(),
       by = "subject_id"
     )
@@ -183,7 +183,7 @@ estimateIncidence <- function(cdm,
       .data$outcome_cohort_id
     ) %>%
     dplyr::filter(.data$outcome_start_date ==
-      max(.data$outcome_start_date, na.rm = TRUE)) %>%
+                    max(.data$outcome_start_date, na.rm = TRUE)) %>%
     dplyr::union_all(
       # all starting during cohort period
       outcome %>%
@@ -198,16 +198,15 @@ estimateIncidence <- function(cdm,
       schema = attr(cdm, "write_schema"),
       overwrite = TRUE
     )
-
-
+  
   outcome <- outcome %>%
     dplyr::group_by(
       .data$subject_id,
       .data$cohort_start_date,
       .data$outcome_cohort_id
-    ) %>%
-    dbplyr::window_order(.data$outcome_start_date) %>%
-    dplyr::mutate(index = rank()) %>%
+    ) %>%  
+     dbplyr::window_order(.data$outcome_start_date) %>%
+    dplyr::mutate(ind = rank()) %>%
     dplyr::ungroup()
 
   outcome <- outcome %>%
@@ -223,15 +222,15 @@ estimateIncidence <- function(cdm,
     dplyr::select(-"outcome_end_date") %>%
     dplyr::full_join(
       outcome %>%
-        dplyr::mutate(index = .data$index + 1) %>%
+        dplyr::mutate(ind = .data$ind + 1) %>%
         dplyr::rename("outcome_prev_end_date" = "outcome_end_date") %>%
         dplyr::select(-"outcome_start_date"),
       by = c(
         "subject_id", "cohort_start_date",
-        "cohort_end_date", "outcome_cohort_id", "index"
+        "cohort_end_date", "outcome_cohort_id", "ind"
       )
     ) %>%
-    dplyr::select(-"index")
+    dplyr::select(-"ind")
 
   outcome <- outcome %>%
     CDMConnector::computeQuery(
@@ -326,7 +325,7 @@ estimateIncidence <- function(cdm,
   # analysis settings
   analysisSettings <- irsList[names(irsList) == "analysis_settings"]
   analysisSettings <- dplyr::bind_rows(analysisSettings,
-    .id = NULL
+                                       .id = NULL
   )
   analysisSettings <- analysisSettings %>%
     dplyr::left_join(
@@ -349,7 +348,7 @@ estimateIncidence <- function(cdm,
       CDMConnector::cohortAttrition(cdm[[denominatorTable]]) %>%
         dplyr::rename("denominator_cohort_id" = "cohort_definition_id") %>%
         dplyr::filter(.data$denominator_cohort_id ==
-          studySpecs[[i]]$denominator_cohort_id) %>%
+                        studySpecs[[i]]$denominator_cohort_id) %>%
         dplyr::mutate(analysis_id = studySpecs[[i]]$analysis_id) %>%
         dplyr::mutate(dplyr::across(dplyr::where(is.numeric), as.integer)),
       irsList[names(irsList) == "attrition"][[i]] %>%
@@ -358,7 +357,7 @@ estimateIncidence <- function(cdm,
   }
   attrition <- irsList[names(irsList) == "attrition"]
   attrition <- dplyr::bind_rows(attrition,
-    .id = NULL
+                                .id = NULL
   ) %>%
     dplyr::select(-"denominator_cohort_id") %>%
     dplyr::relocate("analysis_id")
@@ -368,7 +367,7 @@ estimateIncidence <- function(cdm,
   irs <- irsList[names(irsList) == "ir"]
   # to tibble
   irs <- dplyr::bind_rows(irs,
-    .id = NULL
+                          .id = NULL
   )
 
   # get confidence intervals
@@ -428,7 +427,7 @@ estimateIncidence <- function(cdm,
     # previous function calls)
     p <- 1 + length(stringr::str_subset(
       CDMConnector::listTables(attr(cdm, "dbcon"),
-        schema = attr(cdm, "write_schema")
+                               schema = attr(cdm, "write_schema")
       ),
       "inc_participants"
     ))

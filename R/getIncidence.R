@@ -86,6 +86,7 @@ getIncidence <- function(cdm,
       .data$cohort_end_date
     ))
 
+
   if (is.null(outcomeWashout)) {
     # exclude anyone with a previous outcome
     studyPopOutcome <- studyPopOutcome %>%
