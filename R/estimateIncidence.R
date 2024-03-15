@@ -197,9 +197,17 @@ estimateIncidence <- function(cdm,
       .data$outcome_cohort_id
     ) %>%
     dbplyr::window_order(.data$outcome_start_date) %>%
+<<<<<<< HEAD
+    dplyr::mutate(ind = rank()) %>%
+    dplyr::ungroup()
+
+  outcome <- outcome %>%
+    CDMConnector::computeQuery(
+=======
     dplyr::mutate(index = rank()) %>%
     dplyr::ungroup() %>%
     dplyr::compute(
+>>>>>>> 99448b7a24b0471c13bfe77837ce8d3db76236bc
       name = paste0(tablePrefix, "_inc_3"),
       temporary = FALSE,
       overwrite = TRUE
@@ -208,17 +216,29 @@ estimateIncidence <- function(cdm,
   cdm[[paste0(tablePrefix, "_inc_4")]] <- cdm[[paste0(tablePrefix, "_inc_3")]] %>%
     dplyr::select(-"outcome_end_date") %>%
     dplyr::full_join(
+<<<<<<< HEAD
+      outcome %>%
+        dplyr::mutate(ind = .data$ind + 1) %>%
+=======
       cdm[[paste0(tablePrefix, "_inc_3")]] %>%
         dplyr::mutate(index = .data$index + 1) %>%
+>>>>>>> 99448b7a24b0471c13bfe77837ce8d3db76236bc
         dplyr::rename("outcome_prev_end_date" = "outcome_end_date") %>%
         dplyr::select(-"outcome_start_date"),
       by = c(
         "subject_id", "cohort_start_date",
-        "cohort_end_date", "outcome_cohort_id", "index"
+        "cohort_end_date", "outcome_cohort_id", "ind"
       )
     ) %>%
+<<<<<<< HEAD
+    dplyr::select(-"ind")
+
+  outcome <- outcome %>%
+    CDMConnector::computeQuery(
+=======
     dplyr::select(-"index") %>%
     dplyr::compute(
+>>>>>>> 99448b7a24b0471c13bfe77837ce8d3db76236bc
       name = paste0(tablePrefix, "_inc_4"),
       temporary = FALSE,
       overwrite = TRUE
